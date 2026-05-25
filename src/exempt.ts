@@ -1,7 +1,12 @@
 import {promises as fs} from 'fs';
 import path from 'path';
 import {noTryAsync} from 'no-try';
-import scannerConfig from '../../../manager/scanner/config';
+
+let mediaRoot: string | null = null;
+
+export function setMediaRoot(p: string | null | undefined) {
+    mediaRoot = p || null;
+}
 
 /** Marker filenames that opt a file (or anything under a directory)
  *  out of encoding. Two flavours:
@@ -62,13 +67,14 @@ export async function setExempt(rel: unknown, exempt: boolean): Promise<SetExemp
         return {ok: false, error: 'Invalid path'};
     if (path.isAbsolute(rel) || rel.split(/[\\/]/).includes('..'))
         return {ok: false, error: 'Invalid path'};
+    if (!mediaRoot) return {ok: false, error: 'Media root not configured'};
 
     // Resolve against the media root + double-check the result still
     // sits under it (defence-in-depth against path-traversal cases we
     // missed above).
-    const mediaRoot = path.resolve(scannerConfig.paths.media);
-    const target = path.resolve(mediaRoot, rel);
-    if (target !== mediaRoot && !target.startsWith(mediaRoot + path.sep))
+    const root = path.resolve(mediaRoot);
+    const target = path.resolve(root, rel);
+    if (target !== root && !target.startsWith(root + path.sep))
         return {ok: false, error: 'Path escapes media root'};
 
     const sidecar = `${target}.cgskip`;

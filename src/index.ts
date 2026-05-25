@@ -1,16 +1,16 @@
 import {promises as fs} from 'fs';
 import path from 'path';
 import os from 'os';
-import {CasparPlugin} from '@lappis/cg-manager';
+import {CasparPlugin, UI_INJECTION_ZONE} from '@lappis/cg-manager';
 import {WebsocketOutboundMethod} from 'rest-exchange-protocol';
-import {UI_INJECTION_ZONE} from '../../../manager/plugins/ui';
 import {noTryAsync} from 'no-try';
 import {EncodeQueue} from './queue';
 import {EncodeState, MAX_ATTEMPTS, RETRY_BACKOFF_MS} from './state';
 import {EncodeHistory, HistoryEntry} from './history';
 import {ENCODER_VERSION, probeEncoderVersion} from './probe';
 import {encode, encodeImage} from './encoder';
-import {isExempt, setExempt} from './exempt';
+import {isExempt, setExempt, setMediaRoot} from './exempt';
+import {setCasparPath} from './ffmpeg';
 import {SidecarLimbo} from './limbo';
 import {MediaKind, kindFor} from './media-kind';
 
@@ -64,7 +64,7 @@ const PLUGIN_NAME = 'encode';
  *  state to `<cwd>/plugin-data/encode/`, writes via `os.tmpdir()` →
  *  atomic rename, spawns ffmpeg at PRIORITY_LOW. */
 export default class EncodePlugin extends CasparPlugin {
-    private state: EncodeState;
+    private state!: EncodeState;
     private queue: EncodeQueue<Job> | null = null;
     private dbChangeHandler: ((id: string, doc: MediaDocLike | null) => void) | null = null;
     private route: ReturnType<typeof EncodePlugin.prototype.registerRoute> | null = null;
@@ -84,6 +84,10 @@ export default class EncodePlugin extends CasparPlugin {
     }
 
     protected async onEnable() {
+        const manager = (this.api as any)._manager;
+        setCasparPath(manager?.getCasparProcess()?.casparPath);
+        setMediaRoot(manager?.getMediaScanner()?.mediaRoot);
+
         const dataDir = path.join(process.cwd(), 'plugin-data', PLUGIN_NAME);
         this.state = new EncodeState(dataDir);
         await this.state.load();

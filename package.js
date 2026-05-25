@@ -69,8 +69,8 @@ async function package() {
     await packageUI();
 
     console.log('Packaging plugin...');
-    await fs.rm(path.join(root, 'lappis-plugin'), { recursive: true }).catch(() => null);
-    await fs.rename(path.join(root, 'dist'), path.join(root, 'lappis-plugin'));
+    await fs.rm(path.join(root, 'encoder-plugin'), { recursive: true }).catch(() => null);
+    await fs.rename(path.join(root, 'dist'), path.join(root, 'encoder-plugin'));
 }
 
 async function movePlugin() {
@@ -79,9 +79,9 @@ async function movePlugin() {
 
     console.log('Moving plugin...');
 
-    if (dest.endsWith('/') || dest.endsWith('\\')) dest += 'lappis-plugin';
+    if (dest.endsWith('/') || dest.endsWith('\\')) dest += 'encoder-plugin';
 
-    const src = path.join(root, 'lappis-plugin');
+    const src = path.join(root, 'encoder-plugin');
     await fs.rm(dest, { recursive: true }).catch(() => null);
     await fs.cp(src, dest, { recursive: true });
 
