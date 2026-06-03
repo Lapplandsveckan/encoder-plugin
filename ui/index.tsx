@@ -1,4 +1,5 @@
 import React, {useEffect, useMemo, useState} from 'react';
+import {useTranslation} from './i18n';
 import {
     Box, Card, Chip, LinearProgress, List, ListItem, ListItemText,
     Stack, Typography,
@@ -56,6 +57,7 @@ function useTicker(intervalMs = 1000): number {
 }
 
 const ActiveCard: React.FC<{ active: EncodeStateSnapshot['active'] }> = ({active}) => {
+    const {t} = useTranslation('encode');
     const now = useTicker(1000);
     if (!active) return null;
 
@@ -72,7 +74,7 @@ const ActiveCard: React.FC<{ active: EncodeStateSnapshot['active'] }> = ({active
                 <Stack direction="row" alignItems="center" justifyContent="space-between" gap={2}>
                     <Stack spacing={0.25} sx={{minWidth: 0}}>
                         <Typography variant="caption" sx={{color: 'text.secondary'}}>
-                            Encoding
+                            {t('active.encoding')}
                         </Typography>
                         <Typography
                             variant="h5"
@@ -83,7 +85,7 @@ const ActiveCard: React.FC<{ active: EncodeStateSnapshot['active'] }> = ({active
                         </Typography>
                     </Stack>
                     <Stack alignItems="flex-end" spacing={0.25}>
-                        <Typography variant="caption" sx={{color: 'text.secondary'}}>Elapsed</Typography>
+                        <Typography variant="caption" sx={{color: 'text.secondary'}}>{t('active.elapsed')}</Typography>
                         <Typography variant="body1" sx={{fontVariantNumeric: 'tabular-nums'}}>
                             {formatDuration(elapsedMs)}
                         </Typography>
@@ -113,10 +115,12 @@ const ActiveCard: React.FC<{ active: EncodeStateSnapshot['active'] }> = ({active
     );
 };
 
-const PendingList: React.FC<{ pending: EncodeStateSnapshot['pending'] }> = ({pending}) => (
+const PendingList: React.FC<{ pending: EncodeStateSnapshot['pending'] }> = ({pending}) => {
+    const {t} = useTranslation('encode');
+    return (
     <Card sx={{p: 2.5}}>
         <Stack direction="row" alignItems="center" gap={1} sx={{mb: 1}}>
-            <Typography variant="h5">Queue</Typography>
+            <Typography variant="h5">{t('queue.heading')}</Typography>
             <Chip
                 size="small"
                 label={pending.length}
@@ -125,7 +129,7 @@ const PendingList: React.FC<{ pending: EncodeStateSnapshot['pending'] }> = ({pen
         </Stack>
         {pending.length === 0 ? (
             <Typography variant="body2" sx={{color: 'text.secondary'}}>
-                Nothing waiting.
+                {t('queue.empty')}
             </Typography>
         ) : (
             <List dense disablePadding>
@@ -145,12 +149,15 @@ const PendingList: React.FC<{ pending: EncodeStateSnapshot['pending'] }> = ({pen
             </List>
         )}
     </Card>
-);
+    );
+};
 
-const RecentList: React.FC<{ recent: EncodeStateSnapshot['recent'] }> = ({recent}) => (
+const RecentList: React.FC<{ recent: EncodeStateSnapshot['recent'] }> = ({recent}) => {
+    const {t} = useTranslation('encode');
+    return (
     <Card sx={{p: 2.5}}>
         <Stack direction="row" alignItems="center" gap={1} sx={{mb: 1}}>
-            <Typography variant="h5">Recently encoded</Typography>
+            <Typography variant="h5">{t('recent.heading')}</Typography>
             <Chip
                 size="small"
                 label={recent.length}
@@ -159,7 +166,7 @@ const RecentList: React.FC<{ recent: EncodeStateSnapshot['recent'] }> = ({recent
         </Stack>
         {recent.length === 0 ? (
             <Typography variant="body2" sx={{color: 'text.secondary'}}>
-                Nothing yet — finished encodes will appear here.
+                {t('recent.empty')}
             </Typography>
         ) : (
             <List dense disablePadding>
@@ -170,7 +177,7 @@ const RecentList: React.FC<{ recent: EncodeStateSnapshot['recent'] }> = ({recent
                                 <Stack direction="row" alignItems="center" gap={1}>
                                     <Chip
                                         size="small"
-                                        label={r.success ? 'OK' : 'Failed'}
+                                        label={r.success ? t('recent.ok') : t('recent.failed')}
                                         color={r.success ? 'success' : 'error'}
                                         variant="outlined"
                                         sx={{height: 20, fontSize: '0.65rem'}}
@@ -195,9 +202,11 @@ const RecentList: React.FC<{ recent: EncodeStateSnapshot['recent'] }> = ({recent
             </List>
         )}
     </Card>
-);
+    );
+};
 
 const EncodePage: React.FC = () => {
+    const {t} = useTranslation('encode');
     const socket = useSocket();
     const [snap, setSnap] = useState<EncodeStateSnapshot>(EMPTY);
 
@@ -240,8 +249,8 @@ const EncodePage: React.FC = () => {
     return (
         <Stack spacing={2} sx={{maxWidth: 720}}>
             <Typography variant="body2" sx={{color: 'text.secondary'}}>
-                Prepares uploaded media for playback.
-                {totalQueued > 0 && ` ${totalQueued} item${totalQueued === 1 ? '' : 's'} in flight.`}
+                {t('page.description')}
+                {totalQueued > 0 && ` ${t('page.inFlight', {count: totalQueued})}`}
             </Typography>
 
             {snap.active && <ActiveCard active={snap.active} />}

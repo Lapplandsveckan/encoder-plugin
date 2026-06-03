@@ -1,6 +1,7 @@
 import React, {useState} from 'react';
 import {Checkbox, FormControlLabel, Tooltip} from '@mui/material';
 import {useSocket} from '@web-lib';
+import {useTranslation} from './i18n';
 
 /**
  * UPLOAD_OPTIONS injection: renders a "Skip encoding" checkbox inside
@@ -19,6 +20,7 @@ interface Props {
 }
 
 const UploadOption: React.FC<Props> = ({targetPaths}) => {
+    const {t} = useTranslation('encode');
     const socket = useSocket();
     const [skip, setSkip] = useState(false);
     const [busy, setBusy] = useState(false);
@@ -45,7 +47,7 @@ const UploadOption: React.FC<Props> = ({targetPaths}) => {
     if (!paths.length) return null;
 
     return (
-        <Tooltip title="Skip the encoding step for these files — useful for transparent videos or pre-encoded masters.">
+        <Tooltip title={t('uploadOption.tooltip')}>
             {/* span wrapper so the Tooltip ref works even when the
                 FormControlLabel is disabled / inside busy state */}
             <span style={{display: 'inline-flex'}}>
@@ -58,7 +60,7 @@ const UploadOption: React.FC<Props> = ({targetPaths}) => {
                             onChange={handleToggle}
                         />
                     }
-                    label="Skip encoding"
+                    label={t('uploadOption.label')}
                     sx={{ ml: 0 }}
                 />
             </span>

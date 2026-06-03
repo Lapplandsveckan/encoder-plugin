@@ -1,0 +1,25 @@
+{
+  "active": {
+    "encoding": "Kodar",
+    "elapsed": "Förfluten tid"
+  },
+  "queue": {
+    "heading": "Kö",
+    "empty": "Inget i kö."
+  },
+  "recent": {
+    "heading": "Nyligen kodade",
+    "empty": "Inget än — färdiga kodningar visas här.",
+    "ok": "OK",
+    "failed": "Misslyckades"
+  },
+  "page": {
+    "description": "Förbereder uppladdad media för uppspelning.",
+    "inFlight_one": "{{count}} objekt pågår.",
+    "inFlight_other": "{{count}} objekt pågår."
+  },
+  "uploadOption": {
+    "tooltip": "Hoppa över kodningssteget för dessa filer — användbart för transparenta videor eller förkodade master.",
+    "label": "Hoppa över kodning"
+  }
+}
