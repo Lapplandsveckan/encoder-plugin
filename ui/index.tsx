@@ -1,7 +1,7 @@
 import React, {useEffect, useMemo, useState} from 'react';
 import {useTranslation} from './i18n';
 import {
-    Box, Card, Chip, LinearProgress, List, ListItem, ListItemText,
+    Box, Button, Card, Chip, LinearProgress, List, ListItem, ListItemText,
     Stack, Typography,
 } from '@mui/material';
 import {useSocket} from '@web-lib';
@@ -152,7 +152,10 @@ const PendingList: React.FC<{ pending: EncodeStateSnapshot['pending'] }> = ({pen
     );
 };
 
-const RecentList: React.FC<{ recent: EncodeStateSnapshot['recent'] }> = ({recent}) => {
+const RecentList: React.FC<{
+    recent: EncodeStateSnapshot['recent'];
+    onRetry: (path: string) => void;
+}> = ({recent, onRetry}) => {
     const {t} = useTranslation('encode');
     return (
     <Card sx={{p: 2.5}}>
@@ -186,6 +189,17 @@ const RecentList: React.FC<{ recent: EncodeStateSnapshot['recent'] }> = ({recent
                                     <Typography variant="caption" sx={{color: 'text.secondary'}}>
                                         · {formatDuration(r.durationMs)}
                                     </Typography>
+                                    {!r.success && (
+                                        <Button
+                                            size="small"
+                                            variant="outlined"
+                                            color="error"
+                                            sx={{ml: 'auto', height: 20, fontSize: '0.65rem', py: 0}}
+                                            onClick={() => onRetry(r.path)}
+                                        >
+                                            {t('recent.retry')}
+                                        </Button>
+                                    )}
                                 </Stack>
                             }
                             secondary={r.error ?? r.path}
@@ -246,6 +260,10 @@ const EncodePage: React.FC = () => {
         [snap],
     );
 
+    const handleRetry = (filePath: string) => {
+        socket?.rawRequest('/api/plugin/encode/retry', 'ACTION', {path: filePath}).catch(() => undefined);
+    };
+
     return (
         <Stack spacing={2} sx={{maxWidth: 720}}>
             <Typography variant="body2" sx={{color: 'text.secondary'}}>
@@ -255,7 +273,7 @@ const EncodePage: React.FC = () => {
 
             {snap.active && <ActiveCard active={snap.active} />}
             <PendingList pending={snap.pending} />
-            <RecentList recent={snap.recent} />
+            <RecentList recent={snap.recent} onRetry={handleRetry} />
         </Stack>
     );
 };

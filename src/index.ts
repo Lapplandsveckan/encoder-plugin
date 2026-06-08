@@ -70,6 +70,7 @@ export default class EncodePlugin extends CasparPlugin {
     private dbChangeHandler: ((id: string, doc: MediaDocLike | null) => void) | null = null;
     private route: ReturnType<typeof EncodePlugin.prototype.registerRoute> | null = null;
     private exemptRoute: ReturnType<typeof EncodePlugin.prototype.registerRoute> | null = null;
+    private retryRoute: ReturnType<typeof EncodePlugin.prototype.registerRoute> | null = null;
 
     // Live progress for the active job, mirrored into the broadcast.
     private activeStartedAt = 0;
@@ -124,6 +125,7 @@ export default class EncodePlugin extends CasparPlugin {
         // just store it for unregister on disable.
         this.route = this.registerRoute();
         this.exemptRoute = this.registerExemptRoute();
+        this.retryRoute = this.registerRetryRoute();
         this.registerPage();
         this.registerUploadOption();
     }
@@ -137,6 +139,8 @@ export default class EncodePlugin extends CasparPlugin {
         this.route = null;
         if (this.exemptRoute) this.api.unregisterRoute(this.exemptRoute);
         this.exemptRoute = null;
+        if (this.retryRoute) this.api.unregisterRoute(this.retryRoute);
+        this.retryRoute = null;
 
         this.queue?.stop();
         this.queue = null;
@@ -248,20 +252,51 @@ export default class EncodePlugin extends CasparPlugin {
     }
 
     /**
+     * ACTION /api/plugin/encode/retry — `{path: string}`.
+     * Clears the failed state + history entry for the file and re-queues it.
+     */
+    private registerRetryRoute() {
+        return this.api.registerRoute(
+            'retry',
+            async (request: any) => {
+                const filePath: string | undefined = (request.getData?.() ?? request.data ?? {}).path;
+                if (!filePath) return {ok: false, error: 'missing path'};
+
+                const db = this.api.getFileDatabase();
+                const doc = (db.allDocs() as MediaDocLike[]).find((d) => d.mediaPath === filePath);
+                if (!doc) return {ok: false, error: 'file not found'};
+
+                const id = (doc as {id?: string}).id;
+                if (!id) return {ok: false, error: 'file has no id'};
+                const hash = db.getHash(id);
+                if (hash) this.state.delete(hash);
+
+                this.history?.remove(filePath);
+                this.broadcastState();
+
+                const queued = await this.evaluate(doc);
+                if (!queued) return {ok: false, error: 'file not eligible for re-encoding'};
+                return {ok: true};
+            },
+            'ACTION' as any,
+        );
+    }
+
+    /**
      * Decide whether `doc` needs encoding right now. Cheap checks
      * (state lookup, attempt-count) run first; only candidates that
      * survive those go to the ffmpeg probe (~100ms). Survivors are
      * queued; everything else is silently skipped.
      */
-    private async evaluate(doc: MediaDocLike): Promise<void> {
-        if (!doc?.mediaPath) return;
-        if (typeof doc.mediaSize !== 'number' || typeof doc.mediaTime !== 'number') return;
+    private async evaluate(doc: MediaDocLike): Promise<boolean> {
+        if (!doc?.mediaPath) return false;
+        if (typeof doc.mediaSize !== 'number' || typeof doc.mediaTime !== 'number') return false;
 
         const filePath = doc.mediaPath;
         const kind = kindFor(filePath);
         // Anything that isn't a recognised video container or image is
         // ignored entirely — XML templates, sidecar JSONs, etc.
-        if (!kind) return;
+        if (!kind) return false;
 
         // Hash-keyed state — survives renames + moves so the operator
         // doesn't pay for a needless re-encode just because the path
@@ -269,7 +304,7 @@ export default class EncodePlugin extends CasparPlugin {
         // we see it here.
         const id = (doc as { id?: string }).id;
         const hash = id ? this.api.getFileDatabase().getHash(id) : null;
-        if (!hash) return;
+        if (!hash) return false;
 
         // Rename recovery: a recent unlink may have parked a sidecar
         // keyed by this hash. Claim it onto the new path *before* the
@@ -280,20 +315,20 @@ export default class EncodePlugin extends CasparPlugin {
         // assets (transparent VP8 cards, master files) untouched. Done
         // before the state-cache check so adding the marker to an
         // already-attempted file takes effect immediately.
-        if (await isExempt(filePath)) return;
+        if (await isExempt(filePath)) return false;
 
         const mtime = doc.mediaTime;
         const size = doc.mediaSize;
 
         const entry = this.state.get(hash);
-        if (entry?.completed) return;
+        if (entry?.completed) return false;
         if (entry && entry.attempts >= MAX_ATTEMPTS) {
             this.logger.debug(`Skipping ${filePath} — ${entry.attempts} prior failures`);
-            return;
+            return false;
         }
         if (entry && Date.now() - entry.lastAttemptAt < RETRY_BACKOFF_MS) {
             this.logger.debug(`Skipping ${filePath} — within retry backoff`);
-            return;
+            return false;
         }
 
         // ffmpeg-metadata probe — bounded by container header size, not
@@ -309,7 +344,7 @@ export default class EncodePlugin extends CasparPlugin {
                 completed: true,
             });
             this.logger.debug(`${filePath} already encoded (v${version})`);
-            return;
+            return false;
         }
 
         // Lift source duration off the scanner-populated mediainfo so the
@@ -323,6 +358,7 @@ export default class EncodePlugin extends CasparPlugin {
 
         this.queue?.enqueue({ key: filePath, hash, kind, mtime, size, durationMs });
         this.logger.info(`Queued ${filePath} for re-encode`);
+        return true;
     }
 
     /**

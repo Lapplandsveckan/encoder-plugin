@@ -11,7 +11,8 @@
     "heading": "Nyligen kodade",
     "empty": "Inget än — färdiga kodningar visas här.",
     "ok": "OK",
-    "failed": "Misslyckades"
+    "failed": "Misslyckades",
+    "retry": "Försök igen"
   },
   "page": {
     "description": "Förbereder uppladdad media för uppspelning.",

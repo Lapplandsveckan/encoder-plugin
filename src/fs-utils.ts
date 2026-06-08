@@ -36,12 +36,16 @@ export async function safeReplace(src: string, dest: string): Promise<Error | nu
 
     const stale = `${dest}.deleting-${process.pid}`;
     const [asideErr] = await noTryAsync(() => fs.rename(dest, stale));
-    // ENOENT just means there was no existing file — nothing to move aside.
-    if (asideErr && (asideErr as NodeJS.ErrnoException).code !== 'ENOENT') return asideErr;
+    if (asideErr) {
+        const code = (asideErr as NodeJS.ErrnoException).code;
+        // ENOENT: nothing to move aside, proceed normally.
+        if (code === 'ENOENT') return moveInto(src, dest);
+        return asideErr;
+    }
 
     const err = await moveInto(src, dest);
     if (err) {
-        if (!asideErr) await noTryAsync(() => fs.rename(stale, dest)); // restore
+        await noTryAsync(() => fs.rename(stale, dest)); // restore
         return err;
     }
     await noTryAsync(() => fs.unlink(stale)); // best-effort; OS removes when handles close

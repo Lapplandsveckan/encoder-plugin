@@ -11,7 +11,8 @@
     "heading": "Recently encoded",
     "empty": "Nothing yet — finished encodes will appear here.",
     "ok": "OK",
-    "failed": "Failed"
+    "failed": "Failed",
+    "retry": "Retry"
   },
   "page": {
     "description": "Prepares uploaded media for playback.",

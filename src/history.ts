@@ -49,6 +49,13 @@ export class EncodeHistory {
         this.scheduleSave();
     }
 
+    /** Remove all entries for the given file path. */
+    remove(filePath: string): void {
+        const before = this.entries.length;
+        this.entries = this.entries.filter((e) => e.path !== filePath);
+        if (this.entries.length !== before) this.scheduleSave();
+    }
+
     /** Snapshot for the broadcast/REST payload. Returns the same array
      *  reference between calls when nothing changed — safe because
      *  callers shouldn't mutate it. */
