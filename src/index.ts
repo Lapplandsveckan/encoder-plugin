@@ -12,6 +12,7 @@ import {encode, encodeImage} from './encoder';
 import {isExempt, setExempt, setMediaRoot} from './exempt';
 import {setCasparPath} from './ffmpeg';
 import {SidecarLimbo} from './limbo';
+import {safeReplace} from './fs-utils';
 import {MediaKind, kindFor} from './media-kind';
 
 /** Public-facing snapshot of the plugin's runtime state. The UI subscribes
@@ -424,18 +425,9 @@ export default class EncodePlugin extends CasparPlugin {
             return;
         }
 
-        // Atomic replace. EXDEV (cross-device link) falls back to a
-        // copy then an unlink — same end state, just slower.
-        const [renameErr] = await noTryAsync(() => fs.rename(tmp, job.key));
-        if (renameErr && (renameErr as NodeJS.ErrnoException).code === 'EXDEV') {
-            const [copyErr] = await noTryAsync(() => fs.copyFile(tmp, job.key));
-            if (copyErr) {
-                await fail(new Error(`copy across filesystems failed: ${copyErr.message}`));
-                return;
-            }
-            await noTryAsync(() => fs.unlink(tmp));
-        } else if (renameErr) {
-            await fail(new Error(`rename failed: ${renameErr.message}`));
+        const replaceErr = await safeReplace(tmp, job.key);
+        if (replaceErr) {
+            await fail(new Error(`replace failed: ${replaceErr.message}`));
             return;
         }
 
