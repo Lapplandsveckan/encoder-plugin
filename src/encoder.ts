@@ -1,9 +1,15 @@
-import {spawn, ChildProcess} from 'child_process';
+import { spawn, type ChildProcess } from 'child_process';
 import os from 'os';
-import {noTryAsync} from 'no-try';
-import {ffmpegBinary} from './ffmpeg';
-import {ENCODER_TAG} from './probe';
-import {detectVideoEncoder, getSpec, markEncoderFailed, SPECS, VideoEncoderSpec} from './hwaccel';
+import { noTry, noTryAsync } from 'no-try';
+import { ffmpegBinary } from './ffmpeg';
+import { ENCODER_TAG } from './probe';
+import {
+    detectVideoEncoder,
+    getSpec,
+    markEncoderFailed,
+    SPECS,
+    type VideoEncoderSpec,
+} from './hwaccel';
 
 export interface EncodeOptions {
     input: string;
@@ -30,7 +36,11 @@ const BASE_VIDEO_FILTERS = [
  * The codec/rate-control block comes from the spec; the filter chain,
  * audio, container, and progress args are shared across all encoders.
  */
-const ENCODE_ARGS = (input: string, output: string, spec: VideoEncoderSpec): string[] => [
+const ENCODE_ARGS = (
+    input: string,
+    output: string,
+    spec: VideoEncoderSpec,
+): string[] => [
     '-hide_banner',
     '-y',
     ...(spec.initArgs ?? []),
@@ -68,12 +78,7 @@ const ENCODE_ARGS = (input: string, output: string, spec: VideoEncoderSpec): str
  */
 function makeLowPriority(proc: ChildProcess) {
     if (proc.pid === undefined) return;
-    try {
-        os.setPriority(proc.pid, os.constants.priority.PRIORITY_LOW);
-    } catch {
-        // Process may have died before we got here — fine, we'll see
-        // the exit code via the regular handlers.
-    }
+    noTry(() => os.setPriority(proc.pid!, os.constants.priority.PRIORITY_LOW));
 }
 
 /** Parse one line of ffmpeg's `-progress pipe:1` output. Lines look like
@@ -113,7 +118,7 @@ const IMAGE_ENCODE_ARGS = (input: string, output: string): string[] => [
     input,
     '-vf',
     [
-        'scale=w=\'min(iw,1920)\':h=\'min(ih,1080)\':force_original_aspect_ratio=decrease',
+        "scale=w='min(iw,1920)':h='min(ih,1080)':force_original_aspect_ratio=decrease",
         'pad=1920:1080:(ow-iw)/2:(oh-ih)/2:color=black',
     ].join(','),
     '-metadata',
@@ -147,7 +152,9 @@ function runFfmpeg(
         makeLowPriority(proc);
 
         let stderr = '';
-        proc.stderr?.on('data', (c) => { stderr += c.toString('utf8'); });
+        proc.stderr?.on('data', c => {
+            stderr += c.toString('utf8');
+        });
 
         if (onProgress) {
             let pending = '';
@@ -171,7 +178,7 @@ function runFfmpeg(
         };
         signal?.addEventListener('abort', onAbort);
 
-        proc.on('error', (err) => {
+        proc.on('error', err => {
             signal?.removeEventListener('abort', onAbort);
             reject(err);
         });
@@ -187,14 +194,25 @@ function runFfmpeg(
                 return;
             }
             const tail = stderr.split('\n').slice(-6).join('\n');
-            reject(new Error(`ffmpeg exited ${code}${sig ? ` (${sig})` : ''}: ${tail}`));
+            reject(
+                new Error(
+                    `ffmpeg exited ${code}${sig ? ` (${sig})` : ''}: ${tail}`,
+                ),
+            );
         });
     });
 }
 
-async function runFfmpegWithFallback(opts: EncodeOptions, spec: VideoEncoderSpec): Promise<void> {
+async function runFfmpegWithFallback(
+    opts: EncodeOptions,
+    spec: VideoEncoderSpec,
+): Promise<void> {
     const [err] = await noTryAsync(() =>
-        runFfmpeg(ENCODE_ARGS(opts.input, opts.output, spec), opts.signal, opts.onProgress),
+        runFfmpeg(
+            ENCODE_ARGS(opts.input, opts.output, spec),
+            opts.signal,
+            opts.onProgress,
+        ),
     );
     if (!err) return;
     // Don't retry on abort (user cancelled) or if we're already on software.
@@ -202,7 +220,11 @@ async function runFfmpegWithFallback(opts: EncodeOptions, spec: VideoEncoderSpec
     // HW encoder failed at runtime — demote for the rest of the session so
     // subsequent jobs don't pay the failing-GPU penalty.
     markEncoderFailed(spec.id);
-    return runFfmpeg(ENCODE_ARGS(opts.input, opts.output, SPECS['libx264']), opts.signal, opts.onProgress);
+    return runFfmpeg(
+        ENCODE_ARGS(opts.input, opts.output, SPECS['libx264']),
+        opts.signal,
+        opts.onProgress,
+    );
 }
 
 export async function encode(opts: EncodeOptions): Promise<void> {

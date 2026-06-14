@@ -1,26 +1,26 @@
 {
-  "active": {
-    "encoding": "Encoding",
-    "elapsed": "Elapsed"
-  },
-  "queue": {
-    "heading": "Queue",
-    "empty": "Nothing waiting."
-  },
-  "recent": {
-    "heading": "Recently encoded",
-    "empty": "Nothing yet — finished encodes will appear here.",
-    "ok": "OK",
-    "failed": "Failed",
-    "retry": "Retry"
-  },
-  "page": {
-    "description": "Prepares uploaded media for playback.",
-    "inFlight_one": "{{count}} item in flight.",
-    "inFlight_other": "{{count}} items in flight."
-  },
-  "uploadOption": {
-    "tooltip": "Skip the encoding step for these files — useful for transparent videos or pre-encoded masters.",
-    "label": "Skip encoding"
-  }
+    "active": {
+        "encoding": "Encoding",
+        "elapsed": "Elapsed"
+    },
+    "queue": {
+        "heading": "Queue",
+        "empty": "Nothing waiting."
+    },
+    "recent": {
+        "heading": "Recently encoded",
+        "empty": "Nothing yet — finished encodes will appear here.",
+        "ok": "OK",
+        "failed": "Failed",
+        "retry": "Retry"
+    },
+    "page": {
+        "description": "Prepares uploaded media for playback.",
+        "inFlight_one": "{{count}} item in flight.",
+        "inFlight_other": "{{count}} items in flight."
+    },
+    "uploadOption": {
+        "tooltip": "Skip the encoding step for these files — useful for transparent videos or pre-encoded masters.",
+        "label": "Skip encoding"
+    }
 }

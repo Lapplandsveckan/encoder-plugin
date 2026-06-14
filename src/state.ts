@@ -1,6 +1,6 @@
-import {promises as fs} from 'fs';
+import { promises as fs } from 'fs';
 import path from 'path';
-import {noTryAsync} from 'no-try';
+import { noTryAsync } from 'no-try';
 
 /**
  * Per-content encoder state, keyed by the scanner's sha1. Hash is the
@@ -49,14 +49,20 @@ export class EncodeState {
         if (this.loaded) return;
         this.loaded = true;
 
-        await noTryAsync(() => fs.mkdir(this.dir, {recursive: true}));
-        const [err, raw] = await noTryAsync(() => fs.readFile(this.file, 'utf8'));
+        await noTryAsync(() => fs.mkdir(this.dir, { recursive: true }));
+        const [err, raw] = await noTryAsync(() =>
+            fs.readFile(this.file, 'utf8'),
+        );
         if (err || !raw) return;
 
-        const [parseErr, parsed] = await noTryAsync(async () => JSON.parse(raw));
+        const [parseErr, parsed] = await noTryAsync(async () =>
+            JSON.parse(raw),
+        );
         if (parseErr || !parsed || typeof parsed !== 'object') return;
 
-        for (const [k, v] of Object.entries(parsed as Record<string, unknown>)) {
+        for (const [k, v] of Object.entries(
+            parsed as Record<string, unknown>,
+        )) {
             if (!v || typeof v !== 'object') continue;
             const e = v as Partial<StateEntry>;
             this.entries.set(k, {

@@ -1,10 +1,18 @@
-import React, {useEffect, useMemo, useState} from 'react';
-import {useTranslation} from './i18n';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
-    Box, Button, Card, Chip, LinearProgress, List, ListItem, ListItemText,
-    Stack, Typography,
+    Box,
+    Button,
+    Card,
+    Chip,
+    LinearProgress,
+    List,
+    ListItem,
+    ListItemText,
+    Stack,
+    Typography,
 } from '@mui/material';
-import {useSocket} from '@web-lib';
+import { useSocket } from '@web-lib';
+import { useTranslation } from './i18n';
 
 // Mirrored from the server-side `EncodeStateSnapshot`. Kept locally so
 // the UI bundle doesn't need to import out of the plugin's own folder
@@ -41,7 +49,8 @@ function formatDuration(ms: number): string {
     const h = Math.floor(total / 3600);
     const m = Math.floor((total % 3600) / 60);
     const s = total % 60;
-    if (h > 0) return `${h}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+    if (h > 0)
+        return `${h}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
     return `${m}:${String(s).padStart(2, '0')}`;
 }
 
@@ -56,8 +65,10 @@ function useTicker(intervalMs = 1000): number {
     return now;
 }
 
-const ActiveCard: React.FC<{ active: EncodeStateSnapshot['active'] }> = ({active}) => {
-    const {t} = useTranslation('encode');
+const ActiveCard: React.FC<{ active: EncodeStateSnapshot['active'] }> = ({
+    active,
+}) => {
+    const { t } = useTranslation('encode');
     const now = useTicker(1000);
     if (!active) return null;
 
@@ -69,24 +80,40 @@ const ActiveCard: React.FC<{ active: EncodeStateSnapshot['active'] }> = ({active
         : null;
 
     return (
-        <Card sx={{p: 2.5}}>
+        <Card sx={{ p: 2.5 }}>
             <Stack spacing={1.5}>
-                <Stack direction="row" alignItems="center" justifyContent="space-between" gap={2}>
-                    <Stack spacing={0.25} sx={{minWidth: 0}}>
-                        <Typography variant="caption" sx={{color: 'text.secondary'}}>
+                <Stack
+                    direction="row"
+                    alignItems="center"
+                    justifyContent="space-between"
+                    gap={2}
+                >
+                    <Stack spacing={0.25} sx={{ minWidth: 0 }}>
+                        <Typography
+                            variant="caption"
+                            sx={{ color: 'text.secondary' }}
+                        >
                             {t('active.encoding')}
                         </Typography>
                         <Typography
                             variant="h5"
                             title={active.path}
-                            sx={{wordBreak: 'break-word'}}
+                            sx={{ wordBreak: 'break-word' }}
                         >
                             {basename(active.path)}
                         </Typography>
                     </Stack>
                     <Stack alignItems="flex-end" spacing={0.25}>
-                        <Typography variant="caption" sx={{color: 'text.secondary'}}>{t('active.elapsed')}</Typography>
-                        <Typography variant="body1" sx={{fontVariantNumeric: 'tabular-nums'}}>
+                        <Typography
+                            variant="caption"
+                            sx={{ color: 'text.secondary' }}
+                        >
+                            {t('active.elapsed')}
+                        </Typography>
+                        <Typography
+                            variant="body1"
+                            sx={{ fontVariantNumeric: 'tabular-nums' }}
+                        >
                             {formatDuration(elapsedMs)}
                         </Typography>
                     </Stack>
@@ -94,17 +121,31 @@ const ActiveCard: React.FC<{ active: EncodeStateSnapshot['active'] }> = ({active
 
                 <Box>
                     <LinearProgress
-                        variant={percent === null ? 'indeterminate' : 'determinate'}
+                        variant={
+                            percent === null ? 'indeterminate' : 'determinate'
+                        }
                         value={percent ?? undefined}
-                        sx={{height: 6, borderRadius: 999}}
+                        sx={{ height: 6, borderRadius: 999 }}
                     />
-                    <Stack direction="row" justifyContent="space-between" sx={{mt: 0.75}}>
-                        <Typography variant="caption" sx={{color: 'text.secondary'}}>
+                    <Stack
+                        direction="row"
+                        justifyContent="space-between"
+                        sx={{ mt: 0.75 }}
+                    >
+                        <Typography
+                            variant="caption"
+                            sx={{ color: 'text.secondary' }}
+                        >
                             {formatDuration(active.progressMs)}
-                            {active.durationMs ? ` / ${formatDuration(active.durationMs)}` : ''}
+                            {active.durationMs
+                                ? ` / ${formatDuration(active.durationMs)}`
+                                : ''}
                         </Typography>
                         {percent !== null && (
-                            <Typography variant="caption" sx={{color: 'text.secondary'}}>
+                            <Typography
+                                variant="caption"
+                                sx={{ color: 'text.secondary' }}
+                            >
                                 {percent.toFixed(0)}%
                             </Typography>
                         )}
@@ -115,112 +156,146 @@ const ActiveCard: React.FC<{ active: EncodeStateSnapshot['active'] }> = ({active
     );
 };
 
-const PendingList: React.FC<{ pending: EncodeStateSnapshot['pending'] }> = ({pending}) => {
-    const {t} = useTranslation('encode');
+const PendingList: React.FC<{ pending: EncodeStateSnapshot['pending'] }> = ({
+    pending,
+}) => {
+    const { t } = useTranslation('encode');
     return (
-    <Card sx={{p: 2.5}}>
-        <Stack direction="row" alignItems="center" gap={1} sx={{mb: 1}}>
-            <Typography variant="h5">{t('queue.heading')}</Typography>
-            <Chip
-                size="small"
-                label={pending.length}
-                sx={{height: 20, fontSize: '0.7rem'}}
-            />
-        </Stack>
-        {pending.length === 0 ? (
-            <Typography variant="body2" sx={{color: 'text.secondary'}}>
-                {t('queue.empty')}
-            </Typography>
-        ) : (
-            <List dense disablePadding>
-                {pending.map((p) => (
-                    <ListItem key={p.path} disableGutters disablePadding>
-                        <ListItemText
-                            primary={basename(p.path)}
-                            secondary={p.path}
-                            primaryTypographyProps={{variant: 'body2'}}
-                            secondaryTypographyProps={{
-                                variant: 'caption',
-                                sx: {color: 'text.disabled', wordBreak: 'break-all'},
-                            }}
-                        />
-                    </ListItem>
-                ))}
-            </List>
-        )}
-    </Card>
+        <Card sx={{ p: 2.5 }}>
+            <Stack direction="row" alignItems="center" gap={1} sx={{ mb: 1 }}>
+                <Typography variant="h5">{t('queue.heading')}</Typography>
+                <Chip
+                    size="small"
+                    label={pending.length}
+                    sx={{ height: 20, fontSize: '0.7rem' }}
+                />
+            </Stack>
+            {pending.length === 0 ? (
+                <Typography variant="body2" sx={{ color: 'text.secondary' }}>
+                    {t('queue.empty')}
+                </Typography>
+            ) : (
+                <List dense disablePadding>
+                    {pending.map(p => (
+                        <ListItem key={p.path} disableGutters disablePadding>
+                            <ListItemText
+                                primary={basename(p.path)}
+                                secondary={p.path}
+                                primaryTypographyProps={{ variant: 'body2' }}
+                                secondaryTypographyProps={{
+                                    variant: 'caption',
+                                    sx: {
+                                        color: 'text.disabled',
+                                        wordBreak: 'break-all',
+                                    },
+                                }}
+                            />
+                        </ListItem>
+                    ))}
+                </List>
+            )}
+        </Card>
     );
 };
 
 const RecentList: React.FC<{
     recent: EncodeStateSnapshot['recent'];
     onRetry: (path: string) => void;
-}> = ({recent, onRetry}) => {
-    const {t} = useTranslation('encode');
+}> = ({ recent, onRetry }) => {
+    const { t } = useTranslation('encode');
     return (
-    <Card sx={{p: 2.5}}>
-        <Stack direction="row" alignItems="center" gap={1} sx={{mb: 1}}>
-            <Typography variant="h5">{t('recent.heading')}</Typography>
-            <Chip
-                size="small"
-                label={recent.length}
-                sx={{height: 20, fontSize: '0.7rem'}}
-            />
-        </Stack>
-        {recent.length === 0 ? (
-            <Typography variant="body2" sx={{color: 'text.secondary'}}>
-                {t('recent.empty')}
-            </Typography>
-        ) : (
-            <List dense disablePadding>
-                {recent.map((r) => (
-                    <ListItem key={`${r.path}-${r.completedAt}`} disableGutters disablePadding>
-                        <ListItemText
-                            primary={
-                                <Stack direction="row" alignItems="center" gap={1}>
-                                    <Chip
-                                        size="small"
-                                        label={r.success ? t('recent.ok') : t('recent.failed')}
-                                        color={r.success ? 'success' : 'error'}
-                                        variant="outlined"
-                                        sx={{height: 20, fontSize: '0.65rem'}}
-                                    />
-                                    <Typography variant="body2">{basename(r.path)}</Typography>
-                                    <Typography variant="caption" sx={{color: 'text.secondary'}}>
-                                        · {formatDuration(r.durationMs)}
-                                    </Typography>
-                                    {!r.success && (
-                                        <Button
+        <Card sx={{ p: 2.5 }}>
+            <Stack direction="row" alignItems="center" gap={1} sx={{ mb: 1 }}>
+                <Typography variant="h5">{t('recent.heading')}</Typography>
+                <Chip
+                    size="small"
+                    label={recent.length}
+                    sx={{ height: 20, fontSize: '0.7rem' }}
+                />
+            </Stack>
+            {recent.length === 0 ? (
+                <Typography variant="body2" sx={{ color: 'text.secondary' }}>
+                    {t('recent.empty')}
+                </Typography>
+            ) : (
+                <List dense disablePadding>
+                    {recent.map(r => (
+                        <ListItem
+                            key={`${r.path}-${r.completedAt}`}
+                            disableGutters
+                            disablePadding
+                        >
+                            <ListItemText
+                                primary={
+                                    <Stack
+                                        direction="row"
+                                        alignItems="center"
+                                        gap={1}
+                                    >
+                                        <Chip
                                             size="small"
+                                            label={
+                                                r.success
+                                                    ? t('recent.ok')
+                                                    : t('recent.failed')
+                                            }
+                                            color={
+                                                r.success ? 'success' : 'error'
+                                            }
                                             variant="outlined"
-                                            color="error"
-                                            sx={{ml: 'auto', height: 20, fontSize: '0.65rem', py: 0}}
-                                            onClick={() => onRetry(r.path)}
+                                            sx={{
+                                                height: 20,
+                                                fontSize: '0.65rem',
+                                            }}
+                                        />
+                                        <Typography variant="body2">
+                                            {basename(r.path)}
+                                        </Typography>
+                                        <Typography
+                                            variant="caption"
+                                            sx={{ color: 'text.secondary' }}
                                         >
-                                            {t('recent.retry')}
-                                        </Button>
-                                    )}
-                                </Stack>
-                            }
-                            secondary={r.error ?? r.path}
-                            secondaryTypographyProps={{
-                                variant: 'caption',
-                                sx: {
-                                    color: r.error ? 'error.main' : 'text.disabled',
-                                    wordBreak: 'break-all',
-                                },
-                            }}
-                        />
-                    </ListItem>
-                ))}
-            </List>
-        )}
-    </Card>
+                                            · {formatDuration(r.durationMs)}
+                                        </Typography>
+                                        {!r.success && (
+                                            <Button
+                                                size="small"
+                                                variant="outlined"
+                                                color="error"
+                                                sx={{
+                                                    ml: 'auto',
+                                                    height: 20,
+                                                    fontSize: '0.65rem',
+                                                    py: 0,
+                                                }}
+                                                onClick={() => onRetry(r.path)}
+                                            >
+                                                {t('recent.retry')}
+                                            </Button>
+                                        )}
+                                    </Stack>
+                                }
+                                secondary={r.error ?? r.path}
+                                secondaryTypographyProps={{
+                                    variant: 'caption',
+                                    sx: {
+                                        color: r.error
+                                            ? 'error.main'
+                                            : 'text.disabled',
+                                        wordBreak: 'break-all',
+                                    },
+                                }}
+                            />
+                        </ListItem>
+                    ))}
+                </List>
+            )}
+        </Card>
     );
 };
 
 const EncodePage: React.FC = () => {
-    const {t} = useTranslation('encode');
+    const { t } = useTranslation('encode');
     const socket = useSocket();
     const [snap, setSnap] = useState<EncodeStateSnapshot>(EMPTY);
 
@@ -232,7 +307,8 @@ const EncodePage: React.FC = () => {
         // `plugin/<pluginName>/...` by PluginAPI, so the full path is
         // `/api/plugin/encode/state` on HTTP and `plugin/encode/state`
         // on the WS action topic.
-        socket.rawRequest('/api/plugin/encode/state', 'GET', {})
+        socket
+            .rawRequest('/api/plugin/encode/state', 'GET', {})
             .then((res: any) => {
                 if (cancelled) return;
                 setSnap((res?.data as EncodeStateSnapshot) ?? EMPTY);
@@ -261,14 +337,19 @@ const EncodePage: React.FC = () => {
     );
 
     const handleRetry = (filePath: string) => {
-        socket?.rawRequest('/api/plugin/encode/retry', 'ACTION', {path: filePath}).catch(() => undefined);
+        socket
+            ?.rawRequest('/api/plugin/encode/retry', 'ACTION', {
+                path: filePath,
+            })
+            .catch(() => undefined);
     };
 
     return (
-        <Stack spacing={2} sx={{maxWidth: 720}}>
-            <Typography variant="body2" sx={{color: 'text.secondary'}}>
+        <Stack spacing={2} sx={{ maxWidth: 720 }}>
+            <Typography variant="body2" sx={{ color: 'text.secondary' }}>
                 {t('page.description')}
-                {totalQueued > 0 && ` ${t('page.inFlight', {count: totalQueued})}`}
+                {totalQueued > 0 &&
+                    ` ${t('page.inFlight', { count: totalQueued })}`}
             </Typography>
 
             {snap.active && <ActiveCard active={snap.active} />}

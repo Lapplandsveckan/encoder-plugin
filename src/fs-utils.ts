@@ -1,5 +1,5 @@
-import {promises as fs} from 'fs';
-import {noTryAsync} from 'no-try';
+import { promises as fs } from 'fs';
+import { noTryAsync } from 'no-try';
 
 /**
  * Move `src` onto `dest`, falling back to copy+unlink when they live on
@@ -31,7 +31,10 @@ async function moveInto(src: string, dest: string): Promise<Error | null> {
  * Not atomic on Windows, but failure-safe. Returns the first unrecoverable
  * error, or null on success.
  */
-export async function safeReplace(src: string, dest: string): Promise<Error | null> {
+export async function safeReplace(
+    src: string,
+    dest: string,
+): Promise<Error | null> {
     if (process.platform !== 'win32') return moveInto(src, dest);
 
     const stale = `${dest}.deleting-${process.pid}`;

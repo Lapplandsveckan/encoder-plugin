@@ -1,5 +1,5 @@
-import {promises as fs} from 'fs';
-import {noTryAsync} from 'no-try';
+import { promises as fs } from 'fs';
+import { noTryAsync } from 'no-try';
 
 /**
  * Short-lived holding pen for sidecar files between an unlink and the
@@ -56,7 +56,9 @@ export class SidecarLimbo {
         clearTimeout(entry.timer);
         this.held.delete(hash);
         if (entry.sidecarPath === newSidecarPath) return true;
-        const [err] = await noTryAsync(() => fs.rename(entry.sidecarPath, newSidecarPath));
+        const [err] = await noTryAsync(() =>
+            fs.rename(entry.sidecarPath, newSidecarPath),
+        );
         return !err;
     }
 

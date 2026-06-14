@@ -1,3 +1,5 @@
+import { noTryAsync } from 'no-try';
+
 /**
  * Single-worker FIFO queue. Worker callback receives the next job and
  * an AbortSignal it should honour; the queue itself doesn't know what
@@ -48,7 +50,7 @@ export class EncodeQueue<J extends QueueJob> {
     enqueue(job: J): void {
         if (this.shutdown) return;
         if (this.active?.job.key === job.key) return;
-        if (this.pending.some((p) => p.key === job.key)) return;
+        if (this.pending.some(p => p.key === job.key)) return;
         this.pending.push(job);
         this.onChange?.();
         void this.drain();
@@ -61,7 +63,7 @@ export class EncodeQueue<J extends QueueJob> {
             this.active.abort.abort();
             return;
         }
-        const idx = this.pending.findIndex((p) => p.key === key);
+        const idx = this.pending.findIndex(p => p.key === key);
         if (idx !== -1) {
             this.pending.splice(idx, 1);
             this.onChange?.();
@@ -88,12 +90,7 @@ export class EncodeQueue<J extends QueueJob> {
         const abort = new AbortController();
         this.active = { job, abort };
         this.onChange?.();
-        try {
-            await this.worker(job, abort.signal);
-        } catch {
-            // Worker is responsible for logging — queue just keeps
-            // draining. We never want one bad file to wedge the queue.
-        }
+        await noTryAsync(() => this.worker(job, abort.signal));
         this.active = null;
         this.onChange?.();
         void this.drain();

@@ -1,5 +1,5 @@
-import {spawn} from 'child_process';
-import {ffmpegBinary} from './ffmpeg';
+import { spawn } from 'child_process';
+import { ffmpegBinary } from './ffmpeg';
 
 /**
  * Marker we stamp into every encoded file's container metadata, in the
@@ -24,20 +24,26 @@ const TAG_REGEX = new RegExp(`^comment=${ENCODER_TAG_NAME}@(\\d+)\\s*$`, 'm');
  * Returns the version found, or null if the file wasn't produced by us.
  */
 export function probeEncoderVersion(filePath: string): Promise<number | null> {
-    return new Promise((resolve) => {
-        const proc = spawn(ffmpegBinary(), [
-            '-hide_banner',
-            '-loglevel',
-            'error',
-            '-i',
-            filePath,
-            '-f',
-            'ffmetadata',
-            '-',
-        ], { stdio: ['ignore', 'pipe', 'ignore'] });
+    return new Promise(resolve => {
+        const proc = spawn(
+            ffmpegBinary(),
+            [
+                '-hide_banner',
+                '-loglevel',
+                'error',
+                '-i',
+                filePath,
+                '-f',
+                'ffmetadata',
+                '-',
+            ],
+            { stdio: ['ignore', 'pipe', 'ignore'] },
+        );
 
         let buf = '';
-        proc.stdout.on('data', (c: Buffer) => { buf += c.toString('utf8'); });
+        proc.stdout.on('data', (c: Buffer) => {
+            buf += c.toString('utf8');
+        });
         proc.on('close', () => {
             const m = buf.match(TAG_REGEX);
             resolve(m ? parseInt(m[1], 10) : null);

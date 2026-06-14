@@ -1,19 +1,19 @@
-import {promises as fs} from 'fs';
+import { promises as fs } from 'fs';
 import path from 'path';
 import os from 'os';
-import {CasparPlugin, UI_INJECTION_ZONE} from '@lappis/cg-manager';
-import {WebsocketOutboundMethod} from 'rest-exchange-protocol';
-import {noTryAsync} from 'no-try';
-import {EncodeQueue} from './queue';
-import {EncodeState, MAX_ATTEMPTS, RETRY_BACKOFF_MS} from './state';
-import {EncodeHistory, HistoryEntry} from './history';
-import {ENCODER_VERSION, probeEncoderVersion} from './probe';
-import {encode, encodeImage} from './encoder';
-import {isExempt, setExempt, setMediaRoot} from './exempt';
-import {setCasparPath} from './ffmpeg';
-import {SidecarLimbo} from './limbo';
-import {safeReplace} from './fs-utils';
-import {MediaKind, kindFor} from './media-kind';
+import { CasparPlugin, UI_INJECTION_ZONE } from '@lappis/cg-manager';
+import { WebsocketOutboundMethod } from 'rest-exchange-protocol';
+import { noTryAsync } from 'no-try';
+import { EncodeQueue } from './queue';
+import { EncodeState, MAX_ATTEMPTS, RETRY_BACKOFF_MS } from './state';
+import { EncodeHistory, type HistoryEntry } from './history';
+import { ENCODER_VERSION, probeEncoderVersion } from './probe';
+import { encode, encodeImage } from './encoder';
+import { isExempt, setExempt, setMediaRoot } from './exempt';
+import { setCasparPath } from './ffmpeg';
+import { SidecarLimbo } from './limbo';
+import { safeReplace } from './fs-utils';
+import { type MediaKind, kindFor } from './media-kind';
 
 /** Public-facing snapshot of the plugin's runtime state. The UI subscribes
  *  to `encode/state` broadcasts of this shape (plus an initial GET) so it
@@ -36,7 +36,7 @@ interface EncodeStateSnapshot {
 const PROGRESS_BROADCAST_MS = 250;
 
 interface Job {
-    key: string;             // source path (also the queue dedup key)
+    key: string; // source path (also the queue dedup key)
     /** Content hash from the scanner — used as the state-cache key so
      *  renames / moves don't trigger needless re-encodes. */
     hash: string;
@@ -67,10 +67,18 @@ const PLUGIN_NAME = 'encode';
 export default class EncodePlugin extends CasparPlugin {
     private state!: EncodeState;
     private queue: EncodeQueue<Job> | null = null;
-    private dbChangeHandler: ((id: string, doc: MediaDocLike | null) => void) | null = null;
-    private route: ReturnType<typeof EncodePlugin.prototype.registerRoute> | null = null;
-    private exemptRoute: ReturnType<typeof EncodePlugin.prototype.registerRoute> | null = null;
-    private retryRoute: ReturnType<typeof EncodePlugin.prototype.registerRoute> | null = null;
+    private dbChangeHandler:
+        | ((id: string, doc: MediaDocLike | null) => void)
+        | null = null;
+    private route: ReturnType<
+        typeof EncodePlugin.prototype.registerRoute
+    > | null = null;
+    private exemptRoute: ReturnType<
+        typeof EncodePlugin.prototype.registerRoute
+    > | null = null;
+    private retryRoute: ReturnType<
+        typeof EncodePlugin.prototype.registerRoute
+    > | null = null;
 
     // Live progress for the active job, mirrored into the broadcast.
     private activeStartedAt = 0;
@@ -116,7 +124,9 @@ export default class EncodePlugin extends CasparPlugin {
         // about. The metadata probe handles "already encoded" without
         // touching the state file, so a fresh install on an existing
         // media library still benefits.
-        this.logger.info('First-pass scan — evaluating existing media for re-encode');
+        this.logger.info(
+            'First-pass scan — evaluating existing media for re-encode',
+        );
         for (const doc of db.allDocs() as MediaDocLike[])
             await this.evaluate(doc);
 
@@ -159,13 +169,13 @@ export default class EncodePlugin extends CasparPlugin {
         return {
             active: q.active
                 ? {
-                    path: q.active.key,
-                    startedAt: this.activeStartedAt,
-                    progressMs: this.activeProgressMs,
-                    durationMs: q.active.durationMs,
-                }
+                      path: q.active.key,
+                      startedAt: this.activeStartedAt,
+                      progressMs: this.activeProgressMs,
+                      durationMs: q.active.durationMs,
+                  }
                 : null,
-            pending: q.pending.map((p) => ({ path: p.key })),
+            pending: q.pending.map(p => ({ path: p.key })),
             recent: this.history?.snapshot() ?? [],
         };
     }
@@ -174,7 +184,11 @@ export default class EncodePlugin extends CasparPlugin {
         // PluginAPI prefixes broadcasts + routes with `plugin/<pluginName>/`,
         // so the topic on the wire ends up as `plugin/encode/state`. The
         // UI subscribes to that full path.
-        this.api.broadcast('state', WebsocketOutboundMethod.ACTION, this.snapshot());
+        this.api.broadcast(
+            'state',
+            WebsocketOutboundMethod.ACTION,
+            this.snapshot(),
+        );
     }
 
     /** Same payload as `broadcastState()` but throttled so a fast-running
@@ -235,17 +249,22 @@ export default class EncodePlugin extends CasparPlugin {
             'exempt',
             async (request: any) => {
                 const data = request.getData?.() ?? request.data ?? {};
-                const result = await setExempt(data?.path, Boolean(data?.exempt));
+                const result = await setExempt(
+                    data?.path,
+                    Boolean(data?.exempt),
+                );
                 if (!result.ok) return result;
 
                 if (data?.exempt && this.queue && result.target) {
                     const snap = this.queue.snapshot();
                     if (snap.active?.key === result.target) {
                         this.queue.cancel(result.target);
-                        this.logger.info(`Cancelled active encode after exemption: ${result.target}`);
+                        this.logger.info(
+                            `Cancelled active encode after exemption: ${result.target}`,
+                        );
                     }
                 }
-                return {ok: true};
+                return { ok: true };
             },
             'ACTION' as any,
         );
@@ -259,15 +278,19 @@ export default class EncodePlugin extends CasparPlugin {
         return this.api.registerRoute(
             'retry',
             async (request: any) => {
-                const filePath: string | undefined = (request.getData?.() ?? request.data ?? {}).path;
-                if (!filePath) return {ok: false, error: 'missing path'};
+                const filePath: string | undefined = (
+                    request.getData?.() ?? request.data
+                )?.path;
+                if (!filePath) return { ok: false, error: 'missing path' };
 
                 const db = this.api.getFileDatabase();
-                const doc = (db.allDocs() as MediaDocLike[]).find((d) => d.mediaPath === filePath);
-                if (!doc) return {ok: false, error: 'file not found'};
+                const doc = (db.allDocs() as MediaDocLike[]).find(
+                    d => d.mediaPath === filePath,
+                );
+                if (!doc) return { ok: false, error: 'file not found' };
 
-                const id = (doc as {id?: string}).id;
-                if (!id) return {ok: false, error: 'file has no id'};
+                const id = (doc as { id?: string }).id;
+                if (!id) return { ok: false, error: 'file has no id' };
                 const hash = db.getHash(id);
                 if (hash) this.state.delete(hash);
 
@@ -275,8 +298,12 @@ export default class EncodePlugin extends CasparPlugin {
                 this.broadcastState();
 
                 const queued = await this.evaluate(doc);
-                if (!queued) return {ok: false, error: 'file not eligible for re-encoding'};
-                return {ok: true};
+                if (!queued)
+                    return {
+                        ok: false,
+                        error: 'file not eligible for re-encoding',
+                    };
+                return { ok: true };
             },
             'ACTION' as any,
         );
@@ -290,7 +317,11 @@ export default class EncodePlugin extends CasparPlugin {
      */
     private async evaluate(doc: MediaDocLike): Promise<boolean> {
         if (!doc?.mediaPath) return false;
-        if (typeof doc.mediaSize !== 'number' || typeof doc.mediaTime !== 'number') return false;
+        if (
+            typeof doc.mediaSize !== 'number' ||
+            typeof doc.mediaTime !== 'number'
+        )
+            return false;
 
         const filePath = doc.mediaPath;
         const kind = kindFor(filePath);
@@ -323,7 +354,9 @@ export default class EncodePlugin extends CasparPlugin {
         const entry = this.state.get(hash);
         if (entry?.completed) return false;
         if (entry && entry.attempts >= MAX_ATTEMPTS) {
-            this.logger.debug(`Skipping ${filePath} — ${entry.attempts} prior failures`);
+            this.logger.debug(
+                `Skipping ${filePath} — ${entry.attempts} prior failures`,
+            );
             return false;
         }
         if (entry && Date.now() - entry.lastAttemptAt < RETRY_BACKOFF_MS) {
@@ -351,12 +384,24 @@ export default class EncodePlugin extends CasparPlugin {
         // UI can show a real progress bar. ffprobe already ran during the
         // initial scan; this is just reaching into the cached doc.
         const rawDuration = doc.mediainfo?.format?.duration;
-        const durationSec = typeof rawDuration === 'number'
-            ? rawDuration
-            : typeof rawDuration === 'string' ? parseFloat(rawDuration) : NaN;
-        const durationMs = Number.isFinite(durationSec) ? durationSec * 1000 : undefined;
+        const durationSec =
+            typeof rawDuration === 'number'
+                ? rawDuration
+                : typeof rawDuration === 'string'
+                  ? parseFloat(rawDuration)
+                  : NaN;
+        const durationMs = Number.isFinite(durationSec)
+            ? durationSec * 1000
+            : undefined;
 
-        this.queue?.enqueue({ key: filePath, hash, kind, mtime, size, durationMs });
+        this.queue?.enqueue({
+            key: filePath,
+            hash,
+            kind,
+            mtime,
+            size,
+            durationMs,
+        });
         this.logger.info(`Queued ${filePath} for re-encode`);
         return true;
     }
@@ -383,7 +428,10 @@ export default class EncodePlugin extends CasparPlugin {
         // an image-input + .mp4-output would silently re-encode the
         // still as a 1-frame H.264 video.
         const ext = path.extname(job.key).toLowerCase() || '.mp4';
-        const tmp = path.join(os.tmpdir(), `cg-encode-${process.pid}-${Date.now()}${ext}`);
+        const tmp = path.join(
+            os.tmpdir(),
+            `cg-encode-${process.pid}-${Date.now()}${ext}`,
+        );
         const started = Date.now();
         this.activeStartedAt = started;
         this.activeProgressMs = 0;
@@ -413,18 +461,19 @@ export default class EncodePlugin extends CasparPlugin {
 
         // Image encode is much cheaper and emits no progress, so we
         // skip the onProgress wiring entirely for that path.
-        const [encErr] = await noTryAsync(() => (job.kind === 'image'
-            ? encodeImage({ input: job.key, output: tmp, signal })
-            : encode({
-                input: job.key,
-                output: tmp,
-                signal,
-                onProgress: (ms) => {
-                    this.activeProgressMs = ms;
-                    this.broadcastProgress();
-                },
-            })
-        ));
+        const [encErr] = await noTryAsync(() =>
+            job.kind === 'image'
+                ? encodeImage({ input: job.key, output: tmp, signal })
+                : encode({
+                      input: job.key,
+                      output: tmp,
+                      signal,
+                      onProgress: ms => {
+                          this.activeProgressMs = ms;
+                          this.broadcastProgress();
+                      },
+                  }),
+        );
 
         if (signal.aborted) {
             await noTryAsync(() => fs.unlink(tmp));
@@ -453,7 +502,9 @@ export default class EncodePlugin extends CasparPlugin {
         const statMtime = stat.mtime.getTime();
         if (stat.size !== job.size || statMtime !== job.mtime) {
             await noTryAsync(() => fs.unlink(tmp));
-            this.logger.warn(`Source changed during encode, discarding: ${job.key}`);
+            this.logger.warn(
+                `Source changed during encode, discarding: ${job.key}`,
+            );
             // Don't bump attempts — this is the user replacing the file,
             // not an encoder failure. Drop the old hash entry; the
             // scanner will rescan with the new content's hash.
@@ -482,7 +533,9 @@ export default class EncodePlugin extends CasparPlugin {
             completedAt: Date.now(),
         });
         const seconds = Math.round(durationMs / 1000);
-        this.logger.info(`Encoded ${job.key} → v${ENCODER_VERSION} in ${seconds}s`);
+        this.logger.info(
+            `Encoded ${job.key} → v${ENCODER_VERSION} in ${seconds}s`,
+        );
     }
 
     /** Doc id → file path, queried on demand so a recent removal still resolves. */
@@ -505,17 +558,24 @@ export default class EncodePlugin extends CasparPlugin {
 
         const sidecar = `${filePath}.cgskip`;
         const [accessErr] = await noTryAsync(() => fs.access(sidecar));
-        if (accessErr) return;             // nothing to follow
+        if (accessErr) return; // nothing to follow
 
         // Add-first race: the rename's add event already arrived and
         // a new doc with the same hash is already in the DB. Move the
         // sidecar onto its path right now.
         if (hash) {
-            const target = db.allDocs().find(
-                (d) => d.id !== id && d.mediaPath !== filePath && db.getHash(d.id) === hash,
-            );
+            const target = db
+                .allDocs()
+                .find(
+                    d =>
+                        d.id !== id &&
+                        d.mediaPath !== filePath &&
+                        db.getHash(d.id) === hash,
+                );
             if (target?.mediaPath) {
-                await noTryAsync(() => fs.rename(sidecar, `${target.mediaPath}.cgskip`));
+                await noTryAsync(() =>
+                    fs.rename(sidecar, `${target.mediaPath}.cgskip`),
+                );
                 this.queue?.cancel(target.mediaPath);
                 return;
             }

@@ -1,6 +1,6 @@
-import {promises as fs} from 'fs';
+import { promises as fs } from 'fs';
 import path from 'path';
-import {noTryAsync} from 'no-try';
+import { noTryAsync } from 'no-try';
 
 /**
  * Persistent rolling log of finished encodes — the "Recently encoded"
@@ -39,7 +39,7 @@ export class EncodeHistory {
         const [, parsed] = await noTryAsync(async () => JSON.parse(raw));
         if (!Array.isArray(parsed)) return;
         this.entries = (parsed as HistoryEntry[])
-            .filter((e) => e && typeof e.path === 'string')
+            .filter(e => e && typeof e.path === 'string')
             .slice(0, HISTORY_LIMIT);
     }
 
@@ -52,7 +52,7 @@ export class EncodeHistory {
     /** Remove all entries for the given file path. */
     remove(filePath: string): void {
         const before = this.entries.length;
-        this.entries = this.entries.filter((e) => e.path !== filePath);
+        this.entries = this.entries.filter(e => e.path !== filePath);
         if (this.entries.length !== before) this.scheduleSave();
     }
 

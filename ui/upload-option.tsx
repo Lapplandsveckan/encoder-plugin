@@ -1,7 +1,7 @@
-import React, {useState} from 'react';
-import {Checkbox, FormControlLabel, Tooltip} from '@mui/material';
-import {useSocket} from '@web-lib';
-import {useTranslation} from './i18n';
+import React, { useState } from 'react';
+import { Checkbox, FormControlLabel, Tooltip } from '@mui/material';
+import { useSocket } from '@web-lib';
+import { useTranslation } from './i18n';
 
 /**
  * UPLOAD_OPTIONS injection: renders a "Skip encoding" checkbox inside
@@ -19,8 +19,8 @@ interface Props {
     targetPaths?: string[];
 }
 
-const UploadOption: React.FC<Props> = ({targetPaths}) => {
-    const {t} = useTranslation('encode');
+const UploadOption: React.FC<Props> = ({ targetPaths }) => {
+    const { t } = useTranslation('encode');
     const socket = useSocket();
     const [skip, setSkip] = useState(false);
     const [busy, setBusy] = useState(false);
@@ -38,9 +38,14 @@ const UploadOption: React.FC<Props> = ({targetPaths}) => {
         // the request fails the checkbox state still flips visually,
         // but the plugin will encode normally; that's the right
         // failure mode (encoding rather than silently skipping).
-        await Promise.all(paths.map((path) =>
-            socket.rawRequest('/api/plugin/encode/exempt', 'ACTION', { path, exempt: checked }),
-        ));
+        await Promise.all(
+            paths.map(path =>
+                socket.rawRequest('/api/plugin/encode/exempt', 'ACTION', {
+                    path,
+                    exempt: checked,
+                }),
+            ),
+        );
         setBusy(false);
     };
 
@@ -50,7 +55,7 @@ const UploadOption: React.FC<Props> = ({targetPaths}) => {
         <Tooltip title={t('uploadOption.tooltip')}>
             {/* span wrapper so the Tooltip ref works even when the
                 FormControlLabel is disabled / inside busy state */}
-            <span style={{display: 'inline-flex'}}>
+            <span style={{ display: 'inline-flex' }}>
                 <FormControlLabel
                     control={
                         <Checkbox
