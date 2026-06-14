@@ -2,9 +2,17 @@ import path from 'path';
 import {existsSync} from 'fs';
 
 let casparPath: string | null = null;
+const pathChangeListeners: Array<() => void> = [];
 
 export function setCasparPath(p: string | null | undefined) {
     casparPath = p || null;
+    pathChangeListeners.forEach((cb) => cb());
+}
+
+/** Register a callback invoked whenever the caspar path changes. Used by
+ *  hwaccel.ts to clear the encoder-detection cache without a circular import. */
+export function onCasparPathChange(cb: () => void) {
+    pathChangeListeners.push(cb);
 }
 
 /**

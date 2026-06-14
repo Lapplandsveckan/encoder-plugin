@@ -1,7 +1,9 @@
 import {spawn, ChildProcess} from 'child_process';
 import os from 'os';
+import {noTryAsync} from 'no-try';
 import {ffmpegBinary} from './ffmpeg';
 import {ENCODER_TAG} from './probe';
+import {detectVideoEncoder, getSpec, markEncoderFailed, SPECS, VideoEncoderSpec} from './hwaccel';
 
 export interface EncodeOptions {
     input: string;
@@ -16,45 +18,29 @@ export interface EncodeImageOptions {
     signal?: AbortSignal;
 }
 
+const BASE_VIDEO_FILTERS = [
+    'scale=w=1920:h=1080:force_original_aspect_ratio=decrease',
+    'pad=1920:1080:(ow-iw)/2:(oh-ih)/2',
+    'format=yuv420p',
+    'colorspace=all=bt709:iall=bt2020:fast=1',
+];
+
 /**
- * libx264 encode at the same settings the user's previous standalone
- * encoder used: 1080p30 letterboxed/pillarboxed to 16:9, BT.709 from
- * BT.2020 source colorimetry, AAC 192k stereo. The container is
- * stamped with `comment=cg-encode@v1` so subsequent probes know to
- * skip it.
- *
- * Spawned with PRIORITY_LOW so the kernel gives CasparCG every cycle
- * it asks for — encoding only consumes idle CPU.
+ * Build ffmpeg args for a video encode using the given encoder spec.
+ * The codec/rate-control block comes from the spec; the filter chain,
+ * audio, container, and progress args are shared across all encoders.
  */
-const ENCODE_ARGS = (input: string, output: string): string[] => [
+const ENCODE_ARGS = (input: string, output: string, spec: VideoEncoderSpec): string[] => [
     '-hide_banner',
-    '-y',                                  // overwrite the temp output if it exists
+    '-y',
+    ...(spec.initArgs ?? []),
     '-i',
     input,
-
-    // Video — H.264 baseline-ish, 1080p30, padded to 16:9 from whatever
-    // the source aspect is. yuv420p + colorspace conversion handles
-    // HDR/10-bit sources gracefully.
-    '-c:v',
-    'libx264',
-    '-preset',
-    'slow',
-    '-tune',
-    'film',
-    '-crf',
-    '18',
+    ...spec.codecArgs,
     '-vf',
-    [
-        'scale=w=1920:h=1080:force_original_aspect_ratio=decrease',
-        'pad=1920:1080:(ow-iw)/2:(oh-ih)/2',
-        'format=yuv420p',
-        'colorspace=all=bt709:iall=bt2020:fast=1',
-    ].join(','),
+    [...BASE_VIDEO_FILTERS, ...(spec.filterSuffix ?? [])].join(','),
     '-r',
     '30',
-
-    // Audio — AAC LC at 192k stereo 48k. Matches CasparCG's typical
-    // consumer settings.
     '-c:a',
     'aac',
     '-b:a',
@@ -63,21 +49,13 @@ const ENCODE_ARGS = (input: string, output: string): string[] => [
     '48000',
     '-ac',
     '2',
-
-    // Container — faststart so the moov atom is at the head (CasparCG
-    // can start playing without seeking to the tail), and preserve any
-    // existing metadata tags so we don't lose author/title etc.
     '-movflags',
     '+faststart+use_metadata_tags',
     '-metadata',
     `comment=${ENCODER_TAG}`,
-
-    // Progress — line-buffered key=value pairs on stdout, lets us
-    // report progress without parsing the noisy stderr log.
     '-progress',
     'pipe:1',
     '-nostats',
-
     output,
 ];
 
@@ -214,6 +192,20 @@ function runFfmpeg(
     });
 }
 
-export function encode(opts: EncodeOptions): Promise<void> {
-    return runFfmpeg(ENCODE_ARGS(opts.input, opts.output), opts.signal, opts.onProgress);
+async function runFfmpegWithFallback(opts: EncodeOptions, spec: VideoEncoderSpec): Promise<void> {
+    const [err] = await noTryAsync(() =>
+        runFfmpeg(ENCODE_ARGS(opts.input, opts.output, spec), opts.signal, opts.onProgress),
+    );
+    if (!err) return;
+    // Don't retry on abort (user cancelled) or if we're already on software.
+    if (opts.signal?.aborted || spec.id === 'libx264') throw err;
+    // HW encoder failed at runtime — demote for the rest of the session so
+    // subsequent jobs don't pay the failing-GPU penalty.
+    markEncoderFailed(spec.id);
+    return runFfmpeg(ENCODE_ARGS(opts.input, opts.output, SPECS['libx264']), opts.signal, opts.onProgress);
+}
+
+export async function encode(opts: EncodeOptions): Promise<void> {
+    const id = await detectVideoEncoder();
+    return runFfmpegWithFallback(opts, getSpec(id));
 }
