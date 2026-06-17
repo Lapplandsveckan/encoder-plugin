@@ -14,10 +14,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Clone codebase
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Setup node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
           node-version: 22
           cache: 'yarn'
@@ -36,5 +36,6 @@ jobs:
           tag_name: ${{ github.run_number }}
           draft: false
           prerelease: false
+          fail_on_unmatched_files: true
           files: |
-            ./encoder-plugin.cgplugin
+            ./*.cgplugin
