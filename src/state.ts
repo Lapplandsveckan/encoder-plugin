@@ -18,9 +18,9 @@ export interface StateEntry {
     lastAttemptAt: number;
     lastError: string | null;
     /** True after a successful encode + atomic rename completed for
-     *  this hash. (Note: the encoded file's hash differs from the
-     *  source's — `completed: true` is written by the post-encode
-     *  scan against the *new* hash.) */
+     *  this hash. The old hash is deleted from state after encoding;
+     *  completed: true is written under the new content hash once the
+     *  scanner re-scans and evaluate() finds the embedded marker. */
     completed: boolean;
 }
 

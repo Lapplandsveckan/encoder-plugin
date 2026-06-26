@@ -1,5 +1,34 @@
+import path from 'path';
 import { promises as fs } from 'fs';
 import { noTryAsync } from 'no-try';
+
+/**
+ * Resolve where an encoded file should land given its source path and the
+ * pipeline's fixed output extension (image→.png, video→.mp4).
+ *
+ * If the source already has that extension we replace it in place (same
+ * name). Otherwise (jpg→png, mov→mp4) the output gets a new name; if a
+ * differently-sourced file already owns it we disambiguate with ` (1)`,
+ * ` (2)`, … so we never clobber an unrelated asset. `renamed` tells the
+ * caller whether the original source should be removed afterwards.
+ */
+export async function resolveDest(
+    src: string,
+    targetExt: string,
+): Promise<{ dest: string; renamed: boolean }> {
+    if (path.extname(src).toLowerCase() === targetExt)
+        return { dest: src, renamed: false };
+
+    const dir = path.dirname(src);
+    const base = path.basename(src, path.extname(src));
+    let candidate = path.join(dir, base + targetExt);
+    for (let n = 1; ; n++) {
+        const [err] = await noTryAsync(() => fs.access(candidate));
+        if (err) break; // access failed → doesn't exist → free
+        candidate = path.join(dir, `${base} (${n})${targetExt}`);
+    }
+    return { dest: candidate, renamed: true };
+}
 
 /**
  * Move `src` onto `dest`, falling back to copy+unlink when they live on

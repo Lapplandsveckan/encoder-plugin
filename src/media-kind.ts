@@ -16,8 +16,10 @@ const VIDEO_EXTENSIONS = new Set([
     '.m2ts',
 ]);
 
-/** Still-image formats we normalise (resize + 16:9 letterbox/pillarbox). */
-const IMAGE_EXTENSIONS = new Set(['.png', '.jpg', '.jpeg', '.webp']);
+/** Still-image formats we normalise (resize + 16:9 letterbox/pillarbox).
+ *  WebP is deliberately excluded — it can be animated, and the single-frame
+ *  image pipeline would silently collapse it to one frame. */
+const IMAGE_EXTENSIONS = new Set(['.png', '.jpg', '.jpeg']);
 
 export type MediaKind = 'video' | 'image';
 

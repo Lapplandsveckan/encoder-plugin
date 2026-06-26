@@ -121,14 +121,8 @@ const IMAGE_ENCODE_ARGS = (input: string, output: string): string[] => [
         "scale=w='min(iw,1920)':h='min(ih,1080)':force_original_aspect_ratio=decrease",
         'pad=1920:1080:(ow-iw)/2:(oh-ih)/2:color=black',
     ].join(','),
-    '-metadata',
-    `comment=${ENCODER_TAG}`,
-    // High quality recompression. For PNG this is lossless anyway;
-    // for JPEG `-q:v 2` keeps the file visually identical to the
-    // source while still rewriting the bytes so our metadata stamp
-    // is actually attached.
-    '-q:v',
-    '2',
+    // Output is PNG (driven by the caller's output extension), which is
+    // lossless — no quality flag needed.
     output,
 ];
 

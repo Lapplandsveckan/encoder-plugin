@@ -2,11 +2,15 @@ import { spawn } from 'child_process';
 import { ffmpegBinary } from './ffmpeg';
 
 /**
- * Marker we stamp into every encoded file's container metadata, in the
- * standard `comment` field. Future bumps to the encoder settings should
- * bump the version too — older versions still count as "encoded" for
- * the purposes of skipping re-runs, but the version difference is the
- * signal we'd use to opt back in if a re-encode pass became necessary.
+ * Marker identifying files we've encoded. Videos carry it in the container
+ * `comment` metadata field (read by `probeEncoderVersion` below); still
+ * images carry it in a PNG `tEXt` chunk (see `image-meta.ts`), since
+ * ffmpeg can't persist container metadata in still-image formats.
+ *
+ * Future bumps to the encoder settings should bump the version too — older
+ * versions still count as "encoded" for the purposes of skipping re-runs,
+ * but the version difference is the signal we'd use to opt back in if a
+ * re-encode pass became necessary.
  */
 export const ENCODER_TAG_NAME = 'cg-encode';
 export const ENCODER_VERSION = 1;

@@ -8,11 +8,12 @@ import { EncodeQueue } from './queue';
 import { EncodeState, MAX_ATTEMPTS, RETRY_BACKOFF_MS } from './state';
 import { EncodeHistory, type HistoryEntry } from './history';
 import { ENCODER_VERSION, probeEncoderVersion } from './probe';
+import { stampImage, readImageMarker } from './image-meta';
 import { encode, encodeImage } from './encoder';
 import { isExempt, setExempt, setMediaRoot } from './exempt';
 import { setCasparPath } from './ffmpeg';
 import { SidecarLimbo } from './limbo';
-import { safeReplace } from './fs-utils';
+import { safeReplace, resolveDest } from './fs-utils';
 import { type MediaKind, kindFor } from './media-kind';
 
 /** Public-facing snapshot of the plugin's runtime state. The UI subscribes
@@ -110,9 +111,8 @@ export default class EncodePlugin extends CasparPlugin {
             { onChange: () => this.broadcastState() },
         );
 
-        // Live updates: scanner emits a 'change' for every doc add /
-        // update / remove. Adds/updates → re-evaluate; removes →
-        // clean up after ourselves (queue, sidecar, persisted state).
+        // Live updates: scanner emits 'change' on every doc add/update/remove.
+        // Adds/updates → re-evaluate; removes → clean up after ourselves.
         this.dbChangeHandler = (id, doc) => {
             if (!doc) return this.handleRemoval(id);
             void this.evaluate(doc);
@@ -120,19 +120,17 @@ export default class EncodePlugin extends CasparPlugin {
         const db = this.api.getFileDatabase();
         db.on('change', this.dbChangeHandler);
 
-        // First-pass: iterate everything the scanner already knows
-        // about. The metadata probe handles "already encoded" without
-        // touching the state file, so a fresh install on an existing
-        // media library still benefits.
+        // First-pass: iterate everything the scanner already knows about.
+        // The "already encoded?" check needs no state file, so a fresh
+        // install on an existing library still benefits.
         this.logger.info(
             'First-pass scan — evaluating existing media for re-encode',
         );
         for (const doc of db.allDocs() as MediaDocLike[])
             await this.evaluate(doc);
 
-        // REP endpoints + the page UI. The `?` after `this.api` is for
-        // future-proofing: registerRoute is a no-op return value, we
-        // just store it for unregister on disable.
+        // REP endpoints + the page UI. We store each route handle only so
+        // we can unregister it on disable.
         this.route = this.registerRoute();
         this.exemptRoute = this.registerExemptRoute();
         this.retryRoute = this.registerRetryRoute();
@@ -162,8 +160,8 @@ export default class EncodePlugin extends CasparPlugin {
         this.history = null;
     }
 
-    /** Build the current snapshot from queue + active progress + history.
-     *  Synchronous + cheap — safe to call from any throttled broadcast. */
+    /** Build the snapshot from queue + active progress + history. Cheap +
+     *  synchronous — safe to call from any throttled broadcast. */
     private snapshot(): EncodeStateSnapshot {
         const q = this.queue?.snapshot() ?? { active: null, pending: [] };
         return {
@@ -181,9 +179,8 @@ export default class EncodePlugin extends CasparPlugin {
     }
 
     private broadcastState() {
-        // PluginAPI prefixes broadcasts + routes with `plugin/<pluginName>/`,
-        // so the topic on the wire ends up as `plugin/encode/state`. The
-        // UI subscribes to that full path.
+        // PluginAPI prefixes the topic with `plugin/<pluginName>/`, so the
+        // wire topic is `plugin/encode/state` — what the UI subscribes to.
         this.api.broadcast(
             'state',
             WebsocketOutboundMethod.ACTION,
@@ -207,10 +204,8 @@ export default class EncodePlugin extends CasparPlugin {
     }
 
     private registerRoute() {
-        // PluginAPI prefixes the path with `plugin/<pluginName>/`, so the
-        // final route is `/api/plugin/encode/state`. Clients then follow
-        // the matching `plugin/encode/state` action broadcasts for live
-        // updates.
+        // Final route is `/api/plugin/encode/state`; clients then follow the
+        // matching `plugin/encode/state` broadcasts for live updates.
         return this.api.registerRoute(
             'state',
             async () => this.snapshot(),
@@ -219,9 +214,8 @@ export default class EncodePlugin extends CasparPlugin {
     }
 
     private registerPage() {
-        // The plugin-page injection zone renders our UI inside
-        // `/plugins/encode`. The file is webpack-bundled at runtime by
-        // the manager's UIInjector with React/MUI/web-lib as externals.
+        // Renders our UI inside `/plugins/encode`; webpack-bundled at runtime
+        // by the manager's UIInjector with React/MUI/web-lib as externals.
         this.api.registerUI(
             UI_INJECTION_ZONE.PLUGIN_PAGE,
             path.join(__dirname, 'ui', 'index.tsx'),
@@ -240,9 +234,8 @@ export default class EncodePlugin extends CasparPlugin {
 
     /**
      * POST /api/plugin/encode/exempt — `{path: string, exempt: boolean}`.
-     * Toggles the `<path>.cgnoencode` sidecar inside the media root.
-     * Cancels any matching in-flight encode when a file is exempted
-     * mid-job so the encoder isn't fighting the operator's intent.
+     * Toggles the `<path>.cgnoencode` sidecar inside the media root, and
+     * cancels any matching in-flight encode so we don't fight the operator.
      */
     private registerExemptRoute() {
         return this.api.registerRoute(
@@ -270,10 +263,8 @@ export default class EncodePlugin extends CasparPlugin {
         );
     }
 
-    /**
-     * ACTION /api/plugin/encode/retry — `{path: string}`.
-     * Clears the failed state + history entry for the file and re-queues it.
-     */
+    /** ACTION /api/plugin/encode/retry — `{path: string}`. Clears the failed
+     *  state + history entry for the file and re-queues it. */
     private registerRetryRoute() {
         return this.api.registerRoute(
             'retry',
@@ -329,10 +320,9 @@ export default class EncodePlugin extends CasparPlugin {
         // ignored entirely — XML templates, sidecar JSONs, etc.
         if (!kind) return false;
 
-        // Hash-keyed state — survives renames + moves so the operator
-        // doesn't pay for a needless re-encode just because the path
-        // changed. The scanner has already hashed the file by the time
-        // we see it here.
+        // Hash-keyed state — survives renames + moves so a path change alone
+        // doesn't trigger a needless re-encode. The scanner has already
+        // hashed the file by the time we see it here.
         const id = (doc as { id?: string }).id;
         const hash = id ? this.api.getFileDatabase().getHash(id) : null;
         if (!hash) return false;
@@ -342,10 +332,9 @@ export default class EncodePlugin extends CasparPlugin {
         // exempt check so the exempt marker actually takes effect.
         await this.limbo.claim(hash, `${filePath}.cgskip`);
 
-        // Sidecar / parent-marker exemption — lets operators keep raw
-        // assets (transparent VP8 cards, master files) untouched. Done
-        // before the state-cache check so adding the marker to an
-        // already-attempted file takes effect immediately.
+        // Sidecar / parent-marker exemption — lets operators keep raw assets
+        // untouched. Done before the state-cache check so adding the marker
+        // to an already-attempted file takes effect immediately.
         if (await isExempt(filePath)) return false;
 
         const mtime = doc.mediaTime;
@@ -364,9 +353,13 @@ export default class EncodePlugin extends CasparPlugin {
             return false;
         }
 
-        // ffmpeg-metadata probe — bounded by container header size, not
-        // file size. ~100ms even on huge files.
-        const version = await probeEncoderVersion(filePath);
+        // "Already encoded?" check. Images use a PNG tEXt chunk marker
+        // (ffmpeg can't persist container metadata in still-image formats);
+        // videos use the ffmpeg comment probe (~100ms, header-only).
+        const version =
+            kind === 'image'
+                ? await readImageMarker(filePath)
+                : await probeEncoderVersion(filePath);
         if (version !== null) {
             // Already stamped. Record under the hash so future restarts
             // skip the probe round-trip entirely.
@@ -380,9 +373,8 @@ export default class EncodePlugin extends CasparPlugin {
             return false;
         }
 
-        // Lift source duration off the scanner-populated mediainfo so the
-        // UI can show a real progress bar. ffprobe already ran during the
-        // initial scan; this is just reaching into the cached doc.
+        // Lift source duration off the scanner-populated mediainfo (ffprobe
+        // already ran during the scan) so the UI can show a real progress bar.
         const rawDuration = doc.mediainfo?.format?.duration;
         const durationSec =
             typeof rawDuration === 'number'
@@ -407,11 +399,9 @@ export default class EncodePlugin extends CasparPlugin {
     }
 
     /**
-     * Per-job worker. Owns the temp file lifecycle: created when we
-     * spawn ffmpeg, deleted (or renamed into place) when the encode
-     * finishes one way or another. On success, the source file is
-     * replaced atomically — across filesystems we fall back to
-     * copy+unlink since `rename` returns EXDEV.
+     * Per-job worker. Owns the temp file lifecycle (created on spawn,
+     * deleted or moved into place when the encode finishes). On success the
+     * source is replaced via `safeReplace` (atomic, with EXDEV fallback).
      */
     private async run(job: Job, signal: AbortSignal): Promise<void> {
         // Race-window safety: the file may have been exempted between
@@ -423,11 +413,9 @@ export default class EncodePlugin extends CasparPlugin {
             return;
         }
 
-        // Temp file extension matches the source so ffmpeg picks the
-        // right output encoder (PNG→PNG, MP4→MP4, etc.). Without this
-        // an image-input + .mp4-output would silently re-encode the
-        // still as a 1-frame H.264 video.
-        const ext = path.extname(job.key).toLowerCase() || '.mp4';
+        // Images always encode to PNG; videos always encode to MP4.
+        // Format is driven by the output extension so ffmpeg picks the right muxer.
+        const ext = job.kind === 'image' ? '.png' : '.mp4';
         const tmp = path.join(
             os.tmpdir(),
             `cg-encode-${process.pid}-${Date.now()}${ext}`,
@@ -485,15 +473,22 @@ export default class EncodePlugin extends CasparPlugin {
             return;
         }
 
-        // Source-still-the-same check: if the file was touched while
-        // we were encoding (mtime/size changed) the encoded result is
-        // for stale content. Discard rather than overwrite the newer
-        // version on disk.
-        //
-        // Compare against `mtime.getTime()` (integer ms, matching how
-        // the scanner stored `mediaTime`) rather than `mtimeMs` —
-        // ext4/APFS report sub-ms fractional values on the latter
-        // which would never compare equal to the integer mtime.
+        // Inject the PNG tEXt marker before the file lands in the media root.
+        // If stamping fails we treat it as an encode failure — shipping an
+        // unstamped PNG would re-loop.
+        if (job.kind === 'image') {
+            const [stampErr] = await noTryAsync(() => stampImage(tmp));
+            if (stampErr) {
+                await fail(stampErr as Error);
+                return;
+            }
+        }
+
+        // Source-still-the-same check: if the file was touched while we were
+        // encoding (mtime/size changed) the result is stale — discard rather
+        // than overwrite the newer version. Compare `mtime.getTime()` (integer
+        // ms, as the scanner stored `mediaTime`) not `mtimeMs`, whose sub-ms
+        // fractions on ext4/APFS would never compare equal.
         const [statErr, stat] = await noTryAsync(() => fs.stat(job.key));
         if (statErr || !stat) {
             await fail(new Error('source disappeared during encode'));
@@ -512,29 +507,59 @@ export default class EncodePlugin extends CasparPlugin {
             return;
         }
 
-        const replaceErr = await safeReplace(tmp, job.key);
+        // Output extension is fixed per kind (image→.png, video→.mp4).
+        // resolveDest replaces in place when the extension already matches,
+        // else picks a non-clobbering new name (jpg→png, mov→mp4).
+        const targetExt = job.kind === 'image' ? '.png' : '.mp4';
+        const { dest, renamed } = await resolveDest(job.key, targetExt);
+
+        const replaceErr = await safeReplace(tmp, dest);
         if (replaceErr) {
             await fail(new Error(`replace failed: ${replaceErr.message}`));
             return;
         }
 
-        // The OLD hash is now stale — different bytes are on disk. Drop
-        // it so we don't carry around an orphaned entry forever. The
-        // scanner's rescan will compute the new hash and the next
-        // evaluate() will see the metadata stamp and write a fresh
-        // `completed: true` under the new key.
-        this.state.delete(job.hash);
+        // Remove the original after a successful extension change. A leftover
+        // source would still look unencoded to the scanner and re-queue
+        // immediately (and we'd be storing two copies of the same asset).
+        if (renamed) {
+            const [unlinkErr] = await noTryAsync(() => fs.unlink(job.key));
+            if (unlinkErr) {
+                // Couldn't remove the original. Its bytes (and hash) are
+                // unchanged, so leaving job.hash in state as completed stops
+                // the orphan from re-queueing every rescan — which would
+                // otherwise spawn a fresh `name (n)` duplicate each pass.
+                this.logger.warn(
+                    `Encoded ${job.key} → ${dest} but failed to remove original: ${(unlinkErr as Error).message}`,
+                );
+                this.state.set(job.hash, {
+                    attempts: this.state.get(job.hash)?.attempts ?? 0,
+                    lastAttemptAt: Date.now(),
+                    lastError: null,
+                    completed: true,
+                });
+            } else {
+                // The OLD hash is now stale — the source is gone. Drop it; the
+                // scanner's rescan computes the new hash and evaluate() finds
+                // the marker, writing completed: true under the new key.
+                this.state.delete(job.hash);
+            }
+        } else {
+            // In-place replace: same path, new bytes. The old hash is stale;
+            // drop it so the rescan re-keys under the encoded content's hash.
+            this.state.delete(job.hash);
+        }
 
         const durationMs = Date.now() - started;
         this.pushHistory({
-            path: job.key,
+            path: dest,
             success: true,
             durationMs,
             completedAt: Date.now(),
         });
         const seconds = Math.round(durationMs / 1000);
         this.logger.info(
-            `Encoded ${job.key} → v${ENCODER_VERSION} in ${seconds}s`,
+            `Encoded ${dest} → v${ENCODER_VERSION} in ${seconds}s`,
         );
     }
 
@@ -543,10 +568,9 @@ export default class EncodePlugin extends CasparPlugin {
         return this.api.getFileDatabase().get(id)?.mediaPath ?? null;
     }
 
-    /** Tear down our per-file footprint when a media doc is removed.
-     *  Renames look like unlink + add to the scanner; we treat the
-     *  sidecar specially so the exempt marker follows the file's
-     *  content instead of vanishing with the old path. */
+    /** Tear down our per-file footprint when a media doc is removed. Renames
+     *  look like unlink + add to the scanner, so we move the sidecar specially
+     *  — the exempt marker follows the content, not the old path. */
     private async handleRemoval(id: string) {
         const filePath = this.keyForDoc(id);
         if (!filePath) return;
