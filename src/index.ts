@@ -353,6 +353,17 @@ export default class EncodePlugin extends CasparPlugin {
             return false;
         }
 
+        // The scanner doc can outlive the file (e.g. the original .mov still
+        // has an in-flight change event after a rename-encode deleted it).
+        // Narrow to ENOENT so a transiently-locked-but-present file isn't
+        // silently dropped — the next change event will re-evaluate it.
+        const [accessErr] = await noTryAsync(() => fs.access(filePath));
+        if (accessErr) {
+            if ((accessErr as NodeJS.ErrnoException).code !== 'ENOENT')
+                this.logger.debug(`Cannot access ${filePath}: ${(accessErr as Error).message}`);
+            return false;
+        }
+
         // "Already encoded?" check. Images use a PNG tEXt chunk marker
         // (ffmpeg can't persist container metadata in still-image formats);
         // videos use the ffmpeg comment probe (~100ms, header-only).
@@ -410,6 +421,18 @@ export default class EncodePlugin extends CasparPlugin {
         // already has the job, but the sidecar just appeared.
         if (await isExempt(job.key)) {
             this.logger.info(`Skipping exempted file: ${job.key}`);
+            return;
+        }
+
+        // Defense-in-depth: source may have been deleted in the window between
+        // evaluate() and now (e.g. a stale change event for a .mov that was
+        // already unlinked after a rename-encode). Missing source is not an
+        // encoder failure — don't bump attempts or write a history entry.
+        // Distinct from the post-encode stat (~line 510) which calls fail() for
+        // a source that vanished *during* an active encode.
+        const [missingErr] = await noTryAsync(() => fs.access(job.key));
+        if (missingErr) {
+            this.logger.info(`Skipping missing source: ${job.key}`);
             return;
         }
 
