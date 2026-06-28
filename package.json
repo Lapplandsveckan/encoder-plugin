@@ -46,7 +46,7 @@
   },
   "dependencies": {
     "@babel/preset-react": "^7.23.3",
-    "@lappis/cg-manager": "^0.0.39",
+    "@lappis/cg-manager": "^0.0.48",
     "@mui/material": "^5.15.11",
     "babel-loader": "^8.2.5",
     "i18next": "^23.10.0",
